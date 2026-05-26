@@ -1,23 +1,19 @@
-# commitwriter
+# agents_as_commands
 
-`commitwriter` reads the staged diff in the current git repository, calls `codex exec` with `gpt-5.4-mini` at medium reasoning, and prints:
+This repo contains small standalone CLI tools, each in its own Cargo package.
 
-- a semantic commit subject
-- a short paragraph for the PR description
+## Tools
 
-## Usage
+- `commitwriter`: suggests a semantic commit command and a PR paragraph from staged changes.
+- `thermonuclearcodequalityreview`: runs a very strict maintainability review prompt over the current git changes.
+
 ## Install
 
-To install the binary locally with Cargo:
+Install each tool from its package directory:
 
 ```bash
-cargo install --path .
+(cd commitwriter && cargo install --path .)
+(cd thermonuclearcodequalityreview && cargo install --path .)
 ```
 
-That installs the `commitwriter` executable into your Cargo bin directory, so you can run it from any repository after staging files.
-
-## Usage
-
-After installing, run `commitwriter` from any git repository after staging changes.
-
-The tool fails fast if there are no staged files.
+After installing, run `commitwriter` or `thermonuclearcodequalityreview` from any git repository with the relevant changes staged or present in the working tree.
