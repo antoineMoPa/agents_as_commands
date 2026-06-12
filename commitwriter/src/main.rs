@@ -18,25 +18,41 @@ fn run() -> Result<(), String> {
         ["diff", "--cached", "--name-status", "--no-renames"],
         &repo_root,
     )?;
-    if staged_name_status.trim().is_empty() {
-        return Err("no staged changes found".to_string());
-    }
+    let prompt = if staged_name_status.trim().is_empty() {
+        if has_unstaged_changes(&repo_root)? {
+            return Err("no staged changes found".to_string());
+        }
 
-    let staged_diff = git_output(
-        [
-            "diff",
-            "--cached",
-            "--no-color",
-            "--no-ext-diff",
-            "--unified=3",
-        ],
-        &repo_root,
-    )?;
-    if staged_diff.trim().is_empty() {
-        return Err("staged diff is empty".to_string());
-    }
+        let commit_metadata = git_output(
+            ["show", "--no-color", "--no-ext-diff", "--stat", "HEAD"],
+            &repo_root,
+        )?;
+        let commit_diff = git_output(
+            ["show", "--no-color", "--no-ext-diff", "--unified=3", "HEAD"],
+            &repo_root,
+        )?;
+        if commit_diff.trim().is_empty() {
+            return Err("last commit diff is empty".to_string());
+        }
 
-    let prompt = build_prompt(&repo_root, &staged_name_status, &staged_diff);
+        build_last_commit_prompt(&repo_root, &commit_metadata, &commit_diff)
+    } else {
+        let staged_diff = git_output(
+            [
+                "diff",
+                "--cached",
+                "--no-color",
+                "--no-ext-diff",
+                "--unified=3",
+            ],
+            &repo_root,
+        )?;
+        if staged_diff.trim().is_empty() {
+            return Err("staged diff is empty".to_string());
+        }
+
+        build_staged_prompt(&repo_root, &staged_name_status, &staged_diff)
+    };
     let raw = ask_codex(&repo_root, &prompt)?;
     let suggestion = parse_suggestion(&raw)?;
 
@@ -55,7 +71,17 @@ struct Suggestion {
     pr_paragraph: String,
 }
 
-fn build_prompt(repo_root: &Path, name_status: &str, diff: &str) -> String {
+fn has_unstaged_changes(repo_root: &Path) -> Result<bool, String> {
+    let unstaged_name_status = git_output(["diff", "--name-status", "--no-renames"], repo_root)?;
+    if !unstaged_name_status.trim().is_empty() {
+        return Ok(true);
+    }
+
+    let untracked_files = git_output(["ls-files", "--others", "--exclude-standard"], repo_root)?;
+    Ok(!untracked_files.trim().is_empty())
+}
+
+fn build_staged_prompt(repo_root: &Path, name_status: &str, diff: &str) -> String {
     let mut prompt = String::new();
     prompt.push_str("You are writing a semantic commit suggestion from staged git changes.\n");
     prompt.push_str("Return exactly two lines and nothing else:\n");
@@ -71,6 +97,28 @@ fn build_prompt(repo_root: &Path, name_status: &str, diff: &str) -> String {
     prompt.push_str(&format!("{}\n\n", repo_root.display()));
     prompt.push_str("Staged files:\n");
     prompt.push_str(name_status.trim_end());
+    prompt.push_str("\n\nDiff:\n");
+    prompt.push_str(diff.trim_end());
+    prompt.push('\n');
+    prompt
+}
+
+fn build_last_commit_prompt(repo_root: &Path, commit_metadata: &str, diff: &str) -> String {
+    let mut prompt = String::new();
+    prompt.push_str("You are writing a PR title and description from the last git commit.\n");
+    prompt.push_str("Return exactly two lines and nothing else:\n");
+    prompt.push_str("commit: <one conventional commit subject based on the last commit>\n");
+    prompt.push_str("pr_paragraph: <one short paragraph, 1-2 sentences, for a PR description>\n");
+    prompt.push_str("Rules:\n");
+    prompt.push_str("- Use only the last commit details below.\n");
+    prompt.push_str("- Keep the title concise and specific.\n");
+    prompt.push_str(
+        "- Keep the PR paragraph short, factual, and a little more detailed than the title.\n\n",
+    );
+    prompt.push_str("Repository root:\n");
+    prompt.push_str(&format!("{}\n\n", repo_root.display()));
+    prompt.push_str("Last commit:\n");
+    prompt.push_str(commit_metadata.trim_end());
     prompt.push_str("\n\nDiff:\n");
     prompt.push_str(diff.trim_end());
     prompt.push('\n');

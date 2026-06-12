@@ -5,6 +5,8 @@
 - a semantic commit subject
 - a short paragraph for the PR description
 
+If there are no staged or unstaged changes, it uses the last commit instead.
+
 ## Usage
 ## Install
 
@@ -20,4 +22,4 @@ That installs the `commitwriter` executable into your Cargo bin directory, so yo
 
 After installing, run `commitwriter` from any git repository after staging changes.
 
-The tool fails fast if there are no staged files.
+The tool fails fast if there are unstaged changes but no staged files. If there are no staged or unstaged changes, it writes the title and PR paragraph from the last commit.
