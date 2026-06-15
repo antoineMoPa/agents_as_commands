@@ -7,7 +7,7 @@ This repo contains small standalone CLI tools, each in its own Cargo package.
 - `commitwriter`: suggests a semantic commit command and a PR paragraph from staged changes, or from the last commit when the worktree has no changes.
 - `fixconflicts`: asks Codex to fix unresolved merge conflicts in the current repository.
 - `thermonuclearcodequalityreview`: runs a very strict maintainability review prompt over the current git changes.
-- `yesterday`: summarizes your commits from the last 24 hours in the current repo and submodules.
+- `yesterday`: summarizes your commits from the last 24 hours in the current repo and submodules, using last Friday when run on Monday.
 
 ## Install
 
