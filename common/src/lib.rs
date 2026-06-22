@@ -10,7 +10,10 @@ use std::sync::{
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub fn git_output<const N: usize>(args: [&str; N], dir: impl AsRef<Path>) -> Result<String, String> {
+pub fn git_output<const N: usize>(
+    args: [&str; N],
+    dir: impl AsRef<Path>,
+) -> Result<String, String> {
     git_output_with(args, dir, |status| status.success())
 }
 
@@ -42,68 +45,70 @@ where
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-pub fn run_codex(
+pub fn run_opencode(
     repo_root: &Path,
     prompt: &str,
     spinner_message: &str,
-    output_prefix: &str,
     model: &str,
-    reasoning: &str,
+    variant: &str,
 ) -> Result<String, String> {
-    let output_file = temp_output_file(output_prefix)?;
+    let prompt_file = temp_prompt_file()?;
+    fs::write(&prompt_file, prompt).map_err(|e| {
+        format!(
+            "failed to write opencode prompt to {}: {e}",
+            prompt_file.display()
+        )
+    })?;
     let spinner = Spinner::start(spinner_message);
 
-    let mut child = Command::new("codex")
-        .arg("exec")
+    let mut command = Command::new("opencode");
+    command
+        .arg("run")
         .arg("--model")
         .arg(model)
-        .arg("-c")
-        .arg(format!("model_reasoning_effort=\"{reasoning}\""))
-        .arg("--output-last-message")
-        .arg(&output_file)
-        .arg("-C")
+        .arg("--variant")
+        .arg(variant)
+        .arg("--dir")
         .arg(repo_root)
-        .arg("-")
-        .stdin(Stdio::piped())
+        .arg("--file")
+        .arg(&prompt_file)
+        .arg("--dangerously-skip-permissions")
+        .arg("Follow the instructions in the attached prompt file exactly.");
+
+    let output = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("failed to start codex: {e}"))?;
-
-    {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .ok_or_else(|| "failed to open codex stdin".to_string())?;
-        stdin
-            .write_all(prompt.as_bytes())
-            .map_err(|e| format!("failed to write prompt to codex: {e}"))?;
-    }
-
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("failed to wait for codex: {e}"))?;
+        .output()
+        .map_err(|e| format!("failed to run opencode: {e}"));
+    let _ = fs::remove_file(&prompt_file);
+    let output = output?;
     spinner.stop();
 
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!(
-            "codex exited with status {}\nstdout:\n{}\nstderr:\n{}",
+            "opencode exited with status {}\nstdout:\n{}\nstderr:\n{}",
             output.status,
             stdout.trim(),
             stderr.trim()
         ));
     }
 
-    let raw = fs::read_to_string(&output_file).map_err(|e| {
-        format!(
-            "failed to read codex output from {}: {e}",
-            output_file.display()
-        )
-    })?;
-    let _ = fs::remove_file(&output_file);
-    Ok(raw)
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+fn temp_prompt_file() -> Result<PathBuf, String> {
+    let mut path = env::temp_dir();
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("system clock is before the unix epoch: {e}"))?
+        .as_nanos();
+    path.push(format!(
+        "opencode-prompt-{stamp}-{}.txt",
+        std::process::id()
+    ));
+    Ok(path)
 }
 
 struct Spinner {
@@ -145,6 +150,7 @@ impl Spinner {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
+            eprintln!();
         }
     }
 }
@@ -154,18 +160,9 @@ impl Drop for Spinner {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
+            eprintln!();
         }
     }
-}
-
-fn temp_output_file(prefix: &str) -> Result<PathBuf, String> {
-    let mut path = env::temp_dir();
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| format!("system clock is before the unix epoch: {e}"))?
-        .as_nanos();
-    path.push(format!("{prefix}-{stamp}-{}.txt", std::process::id()));
-    Ok(path)
 }
 
 fn spinner_frames() -> &'static [&'static str] {

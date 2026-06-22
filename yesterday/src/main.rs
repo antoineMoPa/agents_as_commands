@@ -1,9 +1,9 @@
-use common::{git_output, git_output_with, run_codex};
+use common::{git_output, git_output_with, run_opencode};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const CODEX_MODEL: &str = "gpt-5.4-mini";
-const CODEX_REASONING: &str = "low";
+const OPENCODE_MODEL: &str = "openai/gpt-5.4-mini";
+const OPENCODE_VARIANT: &str = "low";
 
 fn main() {
     if let Err(err) = run() {
@@ -29,13 +29,12 @@ fn run() -> Result<(), String> {
     }
 
     let prompt = build_prompt(&repo_root, &identity, &logs, date_range);
-    let raw = run_codex(
+    let raw = run_opencode(
         &repo_root,
         &prompt,
         "summarizing yesterday",
-        "yesterday",
-        CODEX_MODEL,
-        CODEX_REASONING,
+        OPENCODE_MODEL,
+        OPENCODE_VARIANT,
     )?;
 
     print!("{raw}");

@@ -1,7 +1,7 @@
 # thermonuclearcodequalityreview
 
-`thermonuclearcodequalityreview` reads the current git changes, calls `codex exec` with `gpt-5.4-mini` at medium reasoning, and prints a strict code-quality review.
-If the review reports findings, it will ask whether to prompt Codex again to fix them and, if confirmed, start a second Codex pass in the repo. Pass `--fix` to run that fix pass automatically.
+`thermonuclearcodequalityreview` reads the current git changes, calls `opencode run` with `openai/gpt-5.4-mini` at medium variant, and prints a strict code-quality review.
+If the review reports findings, it will ask whether to prompt opencode again to fix them and, if confirmed, start a second opencode pass in the repo. Pass `--fix` to run that fix pass automatically.
 
 ## Install
 

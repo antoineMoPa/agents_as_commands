@@ -1,8 +1,8 @@
-use common::{git_output, run_codex};
+use common::{git_output, run_opencode};
 use std::path::{Path, PathBuf};
 
-const CODEX_MODEL: &str = "gpt-5.4-mini";
-const CODEX_REASONING: &str = "medium";
+const OPENCODE_MODEL: &str = "openai/gpt-5.4-mini";
+const OPENCODE_VARIANT: &str = "medium";
 
 fn main() {
     if let Err(err) = run() {
@@ -53,7 +53,7 @@ fn run() -> Result<(), String> {
 
         build_staged_prompt(&repo_root, &staged_name_status, &staged_diff)
     };
-    let raw = ask_codex(&repo_root, &prompt)?;
+    let raw = ask_opencode(&repo_root, &prompt)?;
     let suggestion = parse_suggestion(&raw)?;
 
     println!(
@@ -125,14 +125,13 @@ fn build_last_commit_prompt(repo_root: &Path, commit_metadata: &str, diff: &str)
     prompt
 }
 
-fn ask_codex(repo_root: &Path, prompt: &str) -> Result<String, String> {
-    run_codex(
+fn ask_opencode(repo_root: &Path, prompt: &str) -> Result<String, String> {
+    run_opencode(
         repo_root,
         prompt,
-        "waiting for Codex",
-        "commitwriter",
-        CODEX_MODEL,
-        CODEX_REASONING,
+        "waiting for opencode",
+        OPENCODE_MODEL,
+        OPENCODE_VARIANT,
     )
 }
 
@@ -154,13 +153,13 @@ fn parse_suggestion(raw: &str) -> Result<Suggestion, String> {
 
     let commit = commit.ok_or_else(|| {
         format!(
-            "codex response did not include a `commit:` line\nraw output:\n{}",
+            "opencode response did not include a `commit:` line\nraw output:\n{}",
             raw.trim()
         )
     })?;
     let pr_paragraph = pr_paragraph.ok_or_else(|| {
         format!(
-            "codex response did not include a `pr_paragraph:` line\nraw output:\n{}",
+            "opencode response did not include a `pr_paragraph:` line\nraw output:\n{}",
             raw.trim()
         )
     })?;

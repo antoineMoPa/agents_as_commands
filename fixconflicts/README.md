@@ -1,6 +1,6 @@
 # fixconflicts
 
-`fixconflicts` asks Codex to fix merge conflicts in the current git repository.
+`fixconflicts` asks opencode to fix merge conflicts in the current git repository.
 
 ## Install
 

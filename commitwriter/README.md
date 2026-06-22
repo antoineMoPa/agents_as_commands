@@ -1,6 +1,6 @@
 # commitwriter
 
-`commitwriter` reads the staged diff in the current git repository, calls `codex exec` with `gpt-5.4-mini` at medium reasoning, and prints:
+`commitwriter` reads the staged diff in the current git repository, calls `opencode run` with `openai/gpt-5.4-mini` at medium variant, and prints:
 
 - a semantic commit subject
 - a short paragraph for the PR description

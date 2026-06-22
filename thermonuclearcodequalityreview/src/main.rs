@@ -1,9 +1,9 @@
-use common::{git_output, git_output_with, run_codex};
+use common::{git_output, git_output_with, run_opencode};
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
-const CODEX_MODEL: &str = "gpt-5.4-mini";
-const CODEX_REASONING: &str = "medium";
+const OPENCODE_MODEL: &str = "openai/gpt-5.4-mini";
+const OPENCODE_VARIANT: &str = "medium";
 
 struct Options {
     fix: bool,
@@ -50,7 +50,7 @@ fn run() -> Result<(), String> {
         &working_diff,
         &untracked_diff,
     );
-    let raw = ask_codex(&repo_root, &prompt)?;
+    let raw = ask_opencode(&repo_root, &prompt)?;
 
     print!("{raw}");
     if !raw.ends_with('\n') {
@@ -66,7 +66,7 @@ fn run() -> Result<(), String> {
             &untracked_diff,
             &raw,
         );
-        let fix_raw = ask_codex(&repo_root, &fix_prompt)?;
+        let fix_raw = ask_opencode(&repo_root, &fix_prompt)?;
         print!("{fix_raw}");
         if !fix_raw.ends_with('\n') {
             println!();
@@ -97,7 +97,7 @@ fn print_usage() {
     println!("Usage: thermonuclearcodequalityreview [--fix]");
     println!();
     println!("Options:");
-    println!("  --fix        Run the Codex fix pass automatically when the review finds issues");
+    println!("  --fix        Run the opencode fix pass automatically when the review finds issues");
     println!("  -h, --help   Show this help message");
 }
 
@@ -182,14 +182,13 @@ fn build_fix_prompt(
     prompt
 }
 
-fn ask_codex(repo_root: &Path, prompt: &str) -> Result<String, String> {
-    run_codex(
+fn ask_opencode(repo_root: &Path, prompt: &str) -> Result<String, String> {
+    run_opencode(
         repo_root,
         prompt,
-        "reviewing with Codex",
-        "thermonuclearcodequalityreview",
-        CODEX_MODEL,
-        CODEX_REASONING,
+        "reviewing with opencode",
+        OPENCODE_MODEL,
+        OPENCODE_VARIANT,
     )
 }
 
@@ -230,7 +229,7 @@ fn should_run_fix(options: &Options) -> Result<bool, String> {
         return Ok(false);
     }
 
-    prompt_yes_no("Prompt Codex to fix the reported issues? [y/N] ")
+    prompt_yes_no("Prompt opencode to fix the reported issues? [y/N] ")
 }
 
 fn review_has_findings(review: &str) -> bool {

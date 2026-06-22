@@ -1,8 +1,8 @@
-use common::{git_output, run_codex};
+use common::{git_output, run_opencode};
 use std::path::PathBuf;
 
-const CODEX_MODEL: &str = "gpt-5.4-mini";
-const CODEX_REASONING: &str = "medium";
+const OPENCODE_MODEL: &str = "openai/gpt-5.4-mini";
+const OPENCODE_VARIANT: &str = "medium";
 
 fn main() {
     if let Err(err) = run() {
@@ -19,13 +19,12 @@ fn run() -> Result<(), String> {
         return Err("no merge conflicts found".to_string());
     }
 
-    let raw = run_codex(
+    let raw = run_opencode(
         &repo_root,
         "can you fix merge conflicts?",
         "fixing merge conflicts",
-        "fixconflicts",
-        CODEX_MODEL,
-        CODEX_REASONING,
+        OPENCODE_MODEL,
+        OPENCODE_VARIANT,
     )?;
 
     print!("{raw}");
