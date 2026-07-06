@@ -1,4 +1,5 @@
 use common::{git_output, git_output_with, run_opencode};
+use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -16,7 +17,7 @@ fn run() -> Result<(), String> {
     let repo_root = PathBuf::from(git_output(["rev-parse", "--show-toplevel"], ".")?.trim());
     let identity = Identity::from_git_config(&repo_root)?;
     let repo_paths = collect_repo_paths(&repo_root)?;
-    let date_range = DateRange::for_today()?;
+    let date_range = DateRange::from_args(env::args().skip(1))?;
     let logs = collect_matching_logs(&repo_root, &repo_paths, &identity, date_range)?;
 
     if logs.trim().is_empty() {
@@ -29,10 +30,11 @@ fn run() -> Result<(), String> {
     }
 
     let prompt = build_prompt(&repo_root, &identity, &logs, date_range);
+    let spinner_message = format!("summarizing {}", date_range.description());
     let raw = run_opencode(
         &repo_root,
         &prompt,
-        "summarizing yesterday",
+        &spinner_message,
         OPENCODE_MODEL,
         OPENCODE_VARIANT,
     )?;
@@ -45,13 +47,60 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Clone, Copy)]
-enum DateRange {
-    Last24Hours,
-    LastFriday,
+#[derive(Clone, Copy, Debug)]
+struct DateRange {
+    date: Option<GitDate>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct GitDate {
+    year: i32,
+    month: u32,
+    day: u32,
 }
 
 impl DateRange {
+    fn from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
+        let mut date = None;
+        let mut back = 0;
+        let mut args = args.peekable();
+
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "-b" | "--back" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "missing value for -b".to_string())?;
+                    back = value
+                        .parse::<u32>()
+                        .map_err(|_| format!("invalid -b value '{value}': expected a number"))?;
+                }
+                "-h" | "--help" => return Err(Self::usage()),
+                _ if arg.starts_with('-') => {
+                    return Err(format!("unknown option '{arg}'\n{}", Self::usage()));
+                }
+                _ => {
+                    if date.is_some() {
+                        return Err(format!("unexpected argument '{arg}'\n{}", Self::usage()));
+                    }
+                    date = Some(GitDate::parse(&arg)?);
+                }
+            }
+        }
+
+        let mut range = if let Some(date) = date {
+            Self { date: Some(date) }
+        } else {
+            Self::for_today()?
+        };
+
+        for _ in 0..back {
+            range = range.previous_weekday()?;
+        }
+
+        Ok(range)
+    }
+
     fn for_today() -> Result<Self, String> {
         let output = Command::new("date")
             .arg("+%u")
@@ -68,17 +117,220 @@ impl DateRange {
         }
 
         if String::from_utf8_lossy(&output.stdout).trim() == "1" {
-            Ok(Self::LastFriday)
+            Ok(Self {
+                date: Some(GitDate::today()?.previous_weekday()?),
+            })
         } else {
-            Ok(Self::Last24Hours)
+            Ok(Self { date: None })
         }
     }
 
-    fn description(self) -> &'static str {
-        match self {
-            Self::Last24Hours => "the last 24 hours",
-            Self::LastFriday => "last Friday",
+    fn previous_weekday(self) -> Result<Self, String> {
+        let mut date = match self.date {
+            Some(date) => date,
+            None => GitDate::today()?.previous_day(),
+        };
+
+        loop {
+            date = date.previous_day();
+            match date.weekday()? {
+                1..=5 => return Ok(Self { date: Some(date) }),
+                _ => {}
+            }
         }
+    }
+
+    fn since(self) -> String {
+        match self.date {
+            Some(date) => format!("{} 00:00", date),
+            None => "24 hours ago".to_string(),
+        }
+    }
+
+    fn until(self) -> Option<String> {
+        self.date.map(|date| format!("{} 00:00", date.next_day()))
+    }
+
+    fn description(self) -> String {
+        match self.date {
+            Some(date) => date.to_string(),
+            None => "the last 24 hours".to_string(),
+        }
+    }
+
+    fn usage() -> String {
+        "usage: yesterday [YYYY-MM-DD] [-b DAYS]".to_string()
+    }
+}
+
+impl GitDate {
+    fn parse(value: &str) -> Result<Self, String> {
+        if value.len() != 10 || &value[4..5] != "-" || &value[7..8] != "-" {
+            return Err(format!("invalid date '{value}': expected YYYY-MM-DD"));
+        }
+
+        let year = value[0..4]
+            .parse::<i32>()
+            .map_err(|_| format!("invalid date '{value}': expected YYYY-MM-DD"))?;
+        let month = value[5..7]
+            .parse::<u32>()
+            .map_err(|_| format!("invalid date '{value}': expected YYYY-MM-DD"))?;
+        let day = value[8..10]
+            .parse::<u32>()
+            .map_err(|_| format!("invalid date '{value}': expected YYYY-MM-DD"))?;
+
+        if !(1..=12).contains(&month) || day == 0 || day > days_in_month(year, month) {
+            return Err(format!("invalid date '{value}'"));
+        }
+
+        let date = Self { year, month, day };
+        date.weekday()?;
+        Ok(date)
+    }
+
+    fn today() -> Result<Self, String> {
+        let output = Command::new("date")
+            .arg("+%Y-%m-%d")
+            .output()
+            .map_err(|e| format!("failed to resolve today's date: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "failed to resolve today's date with status {}: {}",
+                output.status,
+                stderr.trim()
+            ));
+        }
+
+        Self::parse(String::from_utf8_lossy(&output.stdout).trim())
+    }
+
+    fn previous_day(self) -> Self {
+        if self.day > 1 {
+            return Self {
+                day: self.day - 1,
+                ..self
+            };
+        }
+
+        let month = if self.month == 1 { 12 } else { self.month - 1 };
+        let year = if self.month == 1 {
+            self.year - 1
+        } else {
+            self.year
+        };
+
+        Self {
+            year,
+            month,
+            day: days_in_month(year, month),
+        }
+    }
+
+    fn previous_weekday(self) -> Result<Self, String> {
+        let mut date = self;
+
+        loop {
+            date = date.previous_day();
+            match date.weekday()? {
+                1..=5 => return Ok(date),
+                _ => {}
+            }
+        }
+    }
+
+    fn next_day(self) -> Self {
+        let mut year = self.year;
+        let mut month = self.month;
+        let mut day = self.day + 1;
+
+        if day > days_in_month(year, month) {
+            day = 1;
+            month += 1;
+            if month > 12 {
+                month = 1;
+                year += 1;
+            }
+        }
+
+        Self { year, month, day }
+    }
+
+    fn weekday(self) -> Result<u32, String> {
+        let output = Command::new("date")
+            .args(["-j", "-f", "%Y-%m-%d", &self.to_string(), "+%u"])
+            .output()
+            .map_err(|e| format!("failed to check weekday for {self}: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("invalid date '{self}': {}", stderr.trim()));
+        }
+
+        String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<u32>()
+            .map_err(|_| format!("failed to parse weekday for {self}"))
+    }
+}
+
+impl std::fmt::Display for GitDate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:04}-{:02}-{:02}", self.year, self.month, self.day)
+    }
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
+fn is_leap_year(year: i32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_explicit_date() {
+        let range = DateRange::from_args(["2026-07-02".to_string()].into_iter()).unwrap();
+
+        assert_eq!(range.since(), "2026-07-02 00:00");
+        assert_eq!(range.until().unwrap(), "2026-07-03 00:00");
+        assert_eq!(range.description(), "2026-07-02");
+    }
+
+    #[test]
+    fn backs_up_weekdays_from_explicit_date() {
+        let range = DateRange::from_args(
+            ["2026-07-06".to_string(), "-b".to_string(), "1".to_string()].into_iter(),
+        )
+        .unwrap();
+
+        assert_eq!(range.since(), "2026-07-03 00:00");
+        assert_eq!(range.until().unwrap(), "2026-07-04 00:00");
+    }
+
+    #[test]
+    fn rejects_invalid_date() {
+        let err = DateRange::from_args(["2026-02-30".to_string()].into_iter()).unwrap_err();
+
+        assert!(err.contains("invalid date"));
+    }
+
+    #[test]
+    fn calculates_month_boundaries() {
+        let date = GitDate::parse("2024-03-01").unwrap().previous_day();
+
+        assert_eq!(date.to_string(), "2024-02-29");
     }
 }
 
@@ -158,29 +410,36 @@ fn collect_matching_logs(
     let mut sections = Vec::new();
 
     for repo_path in repo_paths {
-        let log = match date_range {
-            DateRange::Last24Hours => git_output(
-                [
-                    "log",
-                    "--all",
-                    "--since=24 hours ago",
-                    "--date=iso-strict",
-                    "--format=%H%x09%ad%x09%an%x09%ae%x09%B%x1e",
-                ],
-                repo_path,
-            )?,
-            DateRange::LastFriday => git_output(
-                [
-                    "log",
-                    "--all",
-                    "--since=last friday 00:00",
-                    "--until=last saturday 00:00",
-                    "--date=iso-strict",
-                    "--format=%H%x09%ad%x09%an%x09%ae%x09%B%x1e",
-                ],
-                repo_path,
-            )?,
-        };
+        let mut args = vec![
+            "log".to_string(),
+            "--all".to_string(),
+            format!("--since={}", date_range.since()),
+            "--date=iso-strict".to_string(),
+            "--format=%H%x09%ad%x09%an%x09%ae%x09%B%x1e".to_string(),
+        ];
+
+        if let Some(until) = date_range.until() {
+            args.insert(3, format!("--until={until}"));
+        }
+
+        let output = Command::new("git")
+            .args(&args)
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| format!("failed to run git: {e}"))?;
+
+        if !output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "git command failed with status {}\nstdout:\n{}\nstderr:\n{}",
+                output.status,
+                stdout.trim(),
+                stderr.trim()
+            ));
+        }
+
+        let log = String::from_utf8_lossy(&output.stdout).into_owned();
         let entries: Vec<String> = log
             .split('\x1e')
             .filter_map(|record| format_matching_log_record(record, identity))
@@ -243,10 +502,10 @@ fn build_prompt(
 ) -> String {
     let mut prompt = String::new();
     prompt.push_str("Summarize in 3 executive bullet points: accomplishments from ");
-    prompt.push_str(date_range.description());
+    prompt.push_str(&date_range.description());
     prompt.push_str(", along with any struggle bullet points if applicable. Provide a general theme for what was worked on.\n\n");
     prompt.push_str("Use only these git commit message logs from ");
-    prompt.push_str(date_range.description());
+    prompt.push_str(&date_range.description());
     prompt.push_str(".\n\n");
     prompt.push_str("Repository root:\n");
     prompt.push_str(&format!("{}\n\n", repo_root.display()));

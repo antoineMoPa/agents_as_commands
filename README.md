@@ -8,7 +8,7 @@ This repo contains small standalone CLI tools, each in its own Cargo package.
 - `autostage`: stages only obvious, low-risk git changes and leaves logic changes for human review.
 - `fixconflicts`: asks opencode to fix unresolved merge conflicts in the current repository.
 - `thermonuclearcodequalityreview`: runs a very strict maintainability review prompt over the current git changes.
-- `yesterday`: summarizes your commits from the last 24 hours in the current repo and submodules, using last Friday when run on Monday.
+- `yesterday`: summarizes your commits from the last 24 hours in the current repo and submodules, using last Friday when run on Monday. Also supports `yesterday YYYY-MM-DD` and `yesterday -b DAYS` to summarize an explicit day or a prior weekday.
 
 ## Install
 
