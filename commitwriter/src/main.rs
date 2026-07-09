@@ -18,11 +18,13 @@ fn run() -> Result<(), String> {
         ["diff", "--cached", "--name-status", "--no-renames"],
         &repo_root,
     )?;
-    let prompt = if staged_name_status.trim().is_empty() {
-        if has_unstaged_changes(&repo_root)? {
-            return Err("no staged changes found".to_string());
-        }
+    let unstaged_name_status = git_output(["diff", "--name-status", "--no-renames"], &repo_root)?;
+    let untracked_files = git_output(["ls-files", "--others", "--exclude-standard"], &repo_root)?;
+    let has_changes = !staged_name_status.trim().is_empty()
+        || !unstaged_name_status.trim().is_empty()
+        || !untracked_files.trim().is_empty();
 
+    let prompt = if !has_changes {
         let commit_metadata = git_output(
             ["show", "--no-color", "--no-ext-diff", "--stat", "HEAD"],
             &repo_root,
@@ -37,21 +39,44 @@ fn run() -> Result<(), String> {
 
         build_last_commit_prompt(&repo_root, &commit_metadata, &commit_diff)
     } else {
-        let staged_diff = git_output(
-            [
-                "diff",
-                "--cached",
-                "--no-color",
-                "--no-ext-diff",
-                "--unified=3",
-            ],
-            &repo_root,
-        )?;
-        if staged_diff.trim().is_empty() {
+        let staged_diff = if staged_name_status.trim().is_empty() {
+            String::new()
+        } else {
+            git_output(
+                [
+                    "diff",
+                    "--cached",
+                    "--no-color",
+                    "--no-ext-diff",
+                    "--unified=3",
+                ],
+                &repo_root,
+            )?
+        };
+        if !staged_name_status.trim().is_empty() && staged_diff.trim().is_empty() {
             return Err("staged diff is empty".to_string());
         }
 
-        build_staged_prompt(&repo_root, &staged_name_status, &staged_diff)
+        let unstaged_diff = if unstaged_name_status.trim().is_empty() {
+            String::new()
+        } else {
+            git_output(
+                ["diff", "--no-color", "--no-ext-diff", "--unified=3"],
+                &repo_root,
+            )?
+        };
+        if !unstaged_name_status.trim().is_empty() && unstaged_diff.trim().is_empty() {
+            return Err("unstaged diff is empty".to_string());
+        }
+
+        build_changes_prompt(
+            &repo_root,
+            &staged_name_status,
+            &staged_diff,
+            &unstaged_name_status,
+            &unstaged_diff,
+            &untracked_files,
+        )
     };
     let raw = ask_opencode(&repo_root, &prompt)?;
     let suggestion = parse_suggestion(&raw)?;
@@ -71,34 +96,48 @@ struct Suggestion {
     pr_paragraph: String,
 }
 
-fn has_unstaged_changes(repo_root: &Path) -> Result<bool, String> {
-    let unstaged_name_status = git_output(["diff", "--name-status", "--no-renames"], repo_root)?;
-    if !unstaged_name_status.trim().is_empty() {
-        return Ok(true);
-    }
-
-    let untracked_files = git_output(["ls-files", "--others", "--exclude-standard"], repo_root)?;
-    Ok(!untracked_files.trim().is_empty())
-}
-
-fn build_staged_prompt(repo_root: &Path, name_status: &str, diff: &str) -> String {
+fn build_changes_prompt(
+    repo_root: &Path,
+    staged_name_status: &str,
+    staged_diff: &str,
+    unstaged_name_status: &str,
+    unstaged_diff: &str,
+    untracked_files: &str,
+) -> String {
     let mut prompt = String::new();
-    prompt.push_str("You are writing a semantic commit suggestion from staged git changes.\n");
+    prompt.push_str("You are writing a semantic commit suggestion from current git changes.\n");
     prompt.push_str("Return exactly two lines and nothing else:\n");
     prompt.push_str("commit: <one conventional commit subject>\n");
     prompt.push_str("pr_paragraph: <one short paragraph, 1-2 sentences, for a PR description>\n");
     prompt.push_str("Rules:\n");
-    prompt.push_str("- Use only the staged diff below.\n");
+    prompt.push_str("- Use both the staged and unstaged changes below.\n");
+    prompt.push_str(
+        "- For untracked files, inspect only the listed files if their contents are needed.\n",
+    );
     prompt.push_str("- Keep the commit concise and specific.\n");
     prompt.push_str(
         "- Keep the PR paragraph short, factual, and a little more detailed than the commit.\n\n",
     );
     prompt.push_str("Repository root:\n");
     prompt.push_str(&format!("{}\n\n", repo_root.display()));
-    prompt.push_str("Staged files:\n");
-    prompt.push_str(name_status.trim_end());
-    prompt.push_str("\n\nDiff:\n");
-    prompt.push_str(diff.trim_end());
+    if !staged_name_status.trim().is_empty() {
+        prompt.push_str("Staged files:\n");
+        prompt.push_str(staged_name_status.trim_end());
+        prompt.push_str("\n\nStaged diff:\n");
+        prompt.push_str(staged_diff.trim_end());
+        prompt.push_str("\n\n");
+    }
+    if !unstaged_name_status.trim().is_empty() {
+        prompt.push_str("Tracked unstaged files:\n");
+        prompt.push_str(unstaged_name_status.trim_end());
+        prompt.push_str("\n\nTracked unstaged diff:\n");
+        prompt.push_str(unstaged_diff.trim_end());
+        prompt.push_str("\n\n");
+    }
+    if !untracked_files.trim().is_empty() {
+        prompt.push_str("Untracked files:\n");
+        prompt.push_str(untracked_files.trim_end());
+    }
     prompt.push('\n');
     prompt
 }

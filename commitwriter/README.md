@@ -1,6 +1,6 @@
 # commitwriter
 
-`commitwriter` reads the staged diff in the current git repository, calls `opencode run` with `openai/gpt-5.4-mini` at medium variant, and prints:
+`commitwriter` reads the staged and unstaged changes in the current git repository, calls `opencode run` with `openai/gpt-5.4-mini` at medium variant, and prints:
 
 - a semantic commit subject
 - a short paragraph for the PR description
@@ -16,10 +16,10 @@ To install the binary locally with Cargo:
 cargo install --path .
 ```
 
-That installs the `commitwriter` executable into your Cargo bin directory, so you can run it from any repository after staging files.
+That installs the `commitwriter` executable into your Cargo bin directory, so you can run it from any repository with staged or unstaged changes.
 
 ## Usage
 
-After installing, run `commitwriter` from any git repository after staging changes.
+After installing, run `commitwriter` from any git repository with staged or unstaged changes.
 
-The tool fails fast if there are unstaged changes but no staged files. If there are no staged or unstaged changes, it writes the title and PR paragraph from the last commit.
+If there are no staged or unstaged changes, it writes the title and PR paragraph from the last commit.
