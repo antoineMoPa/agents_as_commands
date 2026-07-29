@@ -3,7 +3,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const OPENCODE_MODEL: &str = "openai/gpt-5.4-mini";
+const OPENCODE_MODEL: &str = "openai/gpt-5.6-luna";
 const OPENCODE_VARIANT: &str = "low";
 
 fn main() {
@@ -503,7 +503,7 @@ fn build_prompt(
     let mut prompt = String::new();
     prompt.push_str("Summarize in 3 executive bullet points: accomplishments from ");
     prompt.push_str(&date_range.description());
-    prompt.push_str(", along with any struggle bullet points if applicable. Provide a general theme for what was worked on.\n\n");
+    prompt.push_str(". Provide a general theme for what was worked on.\n\n");
     prompt.push_str("Use only these git commit message logs from ");
     prompt.push_str(&date_range.description());
     prompt.push_str(".\n\n");

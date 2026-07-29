@@ -2,7 +2,7 @@ use common::{git_output, git_output_with, run_opencode};
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
-const OPENCODE_MODEL: &str = "openai/gpt-5.4-mini";
+const OPENCODE_MODEL: &str = "openai/gpt-5.6-luna";
 const OPENCODE_VARIANT: &str = "medium";
 
 struct Options {

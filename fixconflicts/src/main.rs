@@ -1,7 +1,7 @@
 use common::{git_output, run_opencode};
 use std::path::PathBuf;
 
-const OPENCODE_MODEL: &str = "openai/gpt-5.4-mini";
+const OPENCODE_MODEL: &str = "openai/gpt-5.6-luna";
 const OPENCODE_VARIANT: &str = "medium";
 
 fn main() {
