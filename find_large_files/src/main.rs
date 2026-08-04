@@ -96,8 +96,8 @@ fn is_excluded_file_type(path: &Path) -> bool {
 
     matches!(
         extension.to_ascii_lowercase().as_str(),
-        // Data and source maps
-        "csv" | "json" | "jsonl" | "map" | "ndjson" | "parquet" | "tsv"
+        // Data, source maps, and lock files
+        "csv" | "json" | "jsonl" | "lock" | "map" | "ndjson" | "parquet" | "tsv"
         // Images
         | "avif" | "bmp" | "gif" | "heic" | "ico" | "jpeg" | "jpg" | "png" | "psd"
         | "svg" | "tif" | "tiff" | "webp"
@@ -155,7 +155,7 @@ fn print_usage() {
 }
 
 fn usage() -> &'static str {
-    "Usage: find_large_files [-n LIMIT]\n\nLists text files in the repo with more than LIMIT lines, excluding gitignored files and common data, media, archive, and binary formats. Defaults to 800."
+    "Usage: find_large_files [-n LIMIT]\n\nLists text files in the repo with more than LIMIT lines, excluding gitignored files and lock, data, media, archive, and binary formats. Defaults to 800."
 }
 
 #[cfg(test)]
@@ -172,6 +172,7 @@ mod tests {
             "bundle.zip",
             "font.woff2",
             "app.wasm",
+            "Cargo.LOCK",
         ] {
             assert!(is_excluded_file_type(Path::new(path)), "{path}");
         }
