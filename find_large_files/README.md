@@ -1,6 +1,7 @@
 # find_large_files
 
-Lists files in the current git repository with more than 800 lines, excluding gitignored files.
+Lists text files in the current git repository with more than 800 lines. Gitignored files,
+common data/media/archive formats, and binary files are excluded.
 
 ```bash
 find_large_files

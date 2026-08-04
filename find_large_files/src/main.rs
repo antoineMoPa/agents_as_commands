@@ -28,7 +28,13 @@ fn run() -> Result<(), String> {
             continue;
         }
 
-        let line_count = count_lines(&path)?;
+        if is_excluded_file_type(&path) {
+            continue;
+        }
+
+        let Some(line_count) = count_lines(&path)? else {
+            continue;
+        };
         if line_count > limit {
             matches.push((line_count, file.to_string()));
         }
@@ -83,20 +89,50 @@ fn parse_positive_limit(value: &str) -> Result<usize, String> {
     }
 }
 
-fn count_lines(path: &Path) -> Result<usize, String> {
+fn is_excluded_file_type(path: &Path) -> bool {
+    let Some(extension) = path.extension().and_then(|extension| extension.to_str()) else {
+        return false;
+    };
+
+    matches!(
+        extension.to_ascii_lowercase().as_str(),
+        // Data and source maps
+        "csv" | "json" | "jsonl" | "map" | "ndjson" | "parquet" | "tsv"
+        // Images
+        | "avif" | "bmp" | "gif" | "heic" | "ico" | "jpeg" | "jpg" | "png" | "psd"
+        | "svg" | "tif" | "tiff" | "webp"
+        // Archives and compressed files
+        | "7z" | "bz2" | "gz" | "rar" | "tar" | "tgz" | "xz" | "zip" | "zst"
+        // Audio and video
+        | "aac" | "avi" | "flac" | "m4a" | "mkv" | "mov" | "mp3" | "mp4" | "mpeg"
+        | "ogg" | "wav" | "webm"
+        // Documents, fonts, databases, and compiled artifacts
+        | "class" | "db" | "dll" | "doc" | "docx" | "dylib" | "eot" | "exe" | "o"
+        | "obj" | "odt" | "pdf" | "ppt" | "pptx" | "pyc" | "so" | "sqlite"
+        | "sqlite3" | "ttf" | "wasm" | "woff" | "woff2" | "xls" | "xlsx"
+    )
+}
+
+fn count_lines(path: &Path) -> Result<Option<usize>, String> {
     let file = File::open(path).map_err(|e| format!("failed to open {}: {e}", path.display()))?;
-    let mut reader = BufReader::new(file);
+    count_reader_lines(BufReader::new(file))
+        .map_err(|e| format!("failed to read {}: {e}", path.display()))
+}
+
+fn count_reader_lines(mut reader: impl Read) -> std::io::Result<Option<usize>> {
     let mut buffer = [0u8; 8192];
     let mut count = 0usize;
     let mut saw_any_bytes = false;
     let mut ended_with_newline = false;
 
     loop {
-        let bytes_read = reader
-            .read(&mut buffer)
-            .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+        let bytes_read = reader.read(&mut buffer)?;
         if bytes_read == 0 {
             break;
+        }
+
+        if buffer[..bytes_read].contains(&0) {
+            return Ok(None);
         }
 
         saw_any_bytes = true;
@@ -111,7 +147,7 @@ fn count_lines(path: &Path) -> Result<usize, String> {
         count += 1;
     }
 
-    Ok(count)
+    Ok(Some(count))
 }
 
 fn print_usage() {
@@ -119,5 +155,48 @@ fn print_usage() {
 }
 
 fn usage() -> &'static str {
-    "Usage: find_large_files [-n LIMIT]\n\nLists repo files with more than LIMIT lines, excluding gitignored files. Defaults to 800."
+    "Usage: find_large_files [-n LIMIT]\n\nLists text files in the repo with more than LIMIT lines, excluding gitignored files and common data, media, archive, and binary formats. Defaults to 800."
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{count_reader_lines, is_excluded_file_type};
+    use std::io::Cursor;
+    use std::path::Path;
+
+    #[test]
+    fn excludes_non_source_file_types_case_insensitively() {
+        for path in [
+            "data.json",
+            "photo.PNG",
+            "bundle.zip",
+            "font.woff2",
+            "app.wasm",
+        ] {
+            assert!(is_excluded_file_type(Path::new(path)), "{path}");
+        }
+    }
+
+    #[test]
+    fn keeps_source_files_and_extensionless_files() {
+        for path in ["src/main.rs", "script", "config.yaml", "types.d.ts"] {
+            assert!(!is_excluded_file_type(Path::new(path)), "{path}");
+        }
+    }
+
+    #[test]
+    fn skips_binary_content_regardless_of_extension() {
+        assert_eq!(
+            count_reader_lines(Cursor::new(b"first\n\0second\n")).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn counts_text_without_a_trailing_newline() {
+        assert_eq!(
+            count_reader_lines(Cursor::new(b"first\nsecond")).unwrap(),
+            Some(2)
+        );
+    }
 }

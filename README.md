@@ -7,7 +7,7 @@ This repo contains small standalone CLI tools, each in its own Cargo package.
 - `commitwriter`: suggests a semantic commit command and a PR paragraph from staged changes, or from the last commit when the worktree has no changes.
 - `autostage`: stages only obvious, low-risk git changes and leaves logic changes for human review.
 - `fixconflicts`: asks opencode to fix unresolved merge conflicts in the current repository.
-- `find_large_files`: lists repo files over 800 lines, excluding gitignored files. Supports `-n LIMIT`.
+- `find_large_files`: lists repo text files over 800 lines, excluding gitignored, data, media, archive, and binary files. Supports `-n LIMIT`.
 - `thermonuclearcodequalityreview`: runs a very strict maintainability review prompt over the current git changes.
 - `yesterday`: summarizes your commits from the last 24 hours in the current repo and submodules, using last Friday when run on Monday. Also supports `yesterday YYYY-MM-DD` and `yesterday -b DAYS` to summarize an explicit day or a prior weekday.
 
